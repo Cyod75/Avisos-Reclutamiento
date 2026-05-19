@@ -1,0 +1,18 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno (¡NUNCA subir al repositorio!)
+.env
+
+# Estado del bot (se regenera automáticamente)
+state.json
+state.json.tmp
+
+# Logs de PM2
+logs/
+
+# Caché y temporales
+*.tmp
+*.log
+.DS_Store
+Thumbs.db

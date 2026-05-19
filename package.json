@@ -1,0 +1,20 @@
+{
+  "name": "reclutamiento-bot",
+  "version": "2.0.0",
+  "description": "Bot de Telegram para seguimiento de noticias del portal de Reclutamiento de la Defensa española",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": ["telegram", "bot", "reclutamiento", "defensa", "noticias"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "axios-retry": "^4.5.0",
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3"
+  }
+}
