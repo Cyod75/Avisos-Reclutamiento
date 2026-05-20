@@ -79,6 +79,18 @@ function extractNewsFromPage(html, baseUrl) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Limpia URLs de Liferay que tienen un UUID después de la extensión.
+ */
+function cleanLiferayImageUrl(url) {
+  if (!url) return null;
+  const liferayRe = /(\.(?:jpg|jpeg|png|gif))\/(?:[0-9a-fA-F\-]+)(?:\?.*)?$/i;
+  if (liferayRe.test(url)) {
+    return url.replace(liferayRe, '$1');
+  }
+  return url;
+}
+
+/**
  * Extrae la URL de imagen principal del artículo.
  */
 function extractImageUrl($ , baseUrl) {
@@ -88,7 +100,25 @@ function extractImageUrl($ , baseUrl) {
     $('meta[property="twitter:image"]').attr('content'),
   ];
   for (const src of metaCandidates) {
-    if (src && src.trim()) return normalizeUrl(src.trim(), baseUrl);
+    if (src && src.trim()) return cleanLiferayImageUrl(normalizeUrl(src.trim(), baseUrl));
+  }
+
+  // Preferir sources de picture ya que sus URLs suelen terminar en .jpg y evitan problemas con Telegram (Liferay UUIDs)
+  const sourceSelectors = [
+    'picture source[media*="1000px"]',
+    'picture source'
+  ];
+  for (const sel of sourceSelectors) {
+    let foundUrl = null;
+    $(sel).each((_, el) => {
+      if (foundUrl) return;
+      const srcset = $(el).attr('srcset') || '';
+      const src = srcset.split(' ')[0]; // por si tiene "url 1000w"
+      if (src.trim() && !src.toLowerCase().includes('logo') && !src.toLowerCase().includes('icon')) {
+        foundUrl = src.trim();
+      }
+    });
+    if (foundUrl) return cleanLiferayImageUrl(normalizeUrl(foundUrl, baseUrl));
   }
 
   const imgSelectors = [
@@ -98,7 +128,7 @@ function extractImageUrl($ , baseUrl) {
   for (const sel of imgSelectors) {
     const src = $(sel).first().attr('src') || '';
     if (src.trim() && !src.toLowerCase().includes('logo')) {
-      return normalizeUrl(src.trim(), baseUrl);
+      return cleanLiferayImageUrl(normalizeUrl(src.trim(), baseUrl));
     }
   }
 
@@ -113,7 +143,7 @@ function extractImageUrl($ , baseUrl) {
     }
   });
 
-  if (fallbackSrc) return normalizeUrl(fallbackSrc, baseUrl);
+  if (fallbackSrc) return cleanLiferayImageUrl(normalizeUrl(fallbackSrc, baseUrl));
 
   return null;
 }
