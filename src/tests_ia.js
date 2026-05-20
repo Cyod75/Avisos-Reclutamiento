@@ -180,7 +180,7 @@ function buildProgressBar(current, total) {
 
 function construirBotonesOpciones(opciones) {
   const btnOptions = opciones.map((opcion, idx) => ([{
-    text: `${LABELS[idx]}·  ${opcion}`,
+    text: `${LABELS[idx]} ·  ${opcion}`,
     callback_data: `tia_r_${idx}`
   }]));
   
@@ -250,10 +250,10 @@ async function procesarRespuestaPsicotecnico(chatId, userId, messageId, opcionId
   const progreso = `${preguntaActual + 1}/${totalPreguntas}`;
   const indicador = esCorrecta ? '✅' : '❌';
 
-  let answerText = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n${buildProgressBar(preguntaActual + 1, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${indicador}  <b>${LABELS[opcionIdx]}·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
+  let answerText = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n${buildProgressBar(preguntaActual + 1, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${indicador}  <b>${LABELS[opcionIdx]} ·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
 
   if (!esCorrecta) {
-    answerText += `\n✅  <b>${LABELS[pregunta.correct]}·</b> ${tg.escapeHtml(pregunta.opciones[pregunta.correct])}`;
+    answerText += `\n✅  <b>${LABELS[pregunta.correct]} ·</b> ${tg.escapeHtml(pregunta.opciones[pregunta.correct])}`;
   }
 
   // Botón de explicación (guarda índice de la pregunta respondida)
@@ -355,7 +355,7 @@ async function procesarRespuestaPersonalidad(chatId, userId, messageId, opcionId
   const nuevasRespuestas = [...respuestas, opcionIdx];
   const progreso = `${preguntaActual + 1}/${totalPreguntas}`;
   
-  const answerText = `<b>Pregunta ${progreso}</b>\n${buildProgressBar(preguntaActual + 1, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n▸ <b>${LABELS[opcionIdx]}·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
+  const answerText = `<b>Pregunta ${progreso}</b>\n${buildProgressBar(preguntaActual + 1, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n▸ <b>${LABELS[opcionIdx]} ·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
   
   try {
     await tg.editMessageText(config.botToken, chatId, messageId, answerText, {}, config.timeoutMs);
@@ -470,10 +470,10 @@ async function mostrarExplicacion(chatId, userId, messageId, preguntaIdx) {
   const esCorrecta = opcionIdx === pregunta.correct;
   const indicador = esCorrecta ? '✅' : '❌';
 
-  let answerText = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n${buildProgressBar(preguntaIdx + 1, session.totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${indicador}  <b>${LABELS[opcionIdx]}·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
+  let answerText = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n${buildProgressBar(preguntaIdx + 1, session.totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${indicador}  <b>${LABELS[opcionIdx]} ·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
 
   if (!esCorrecta) {
-    answerText += `\n✅  <b>${LABELS[pregunta.correct]}·</b> ${tg.escapeHtml(pregunta.opciones[pregunta.correct])}`;
+    answerText += `\n✅  <b>${LABELS[pregunta.correct]} ·</b> ${tg.escapeHtml(pregunta.opciones[pregunta.correct])}`;
   }
 
   answerText += `\n\n💡 <i>${tg.escapeHtml(pregunta.explanation)}</i>`;
