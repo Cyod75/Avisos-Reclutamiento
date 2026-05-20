@@ -27,6 +27,7 @@ function buildHelpText() {
     '/start — Bienvenida\n' +
     '/ayuda — Este menú de ayuda\n' +
     '/ultima_noticia — Última noticia con foto y resumen\n' +
+    '/ultima_publicacion — Última publicación oficial\n' +
     '/acceder — Enlace directo al portal de reclutamiento\n' +
     '/categorias — Categorías y áreas de reclutamiento\n' +
     '/contacto — Teléfonos y correos de interés\n' +
@@ -45,7 +46,7 @@ function buildWelcomeText() {
 
 function buildStateText(state, newsCount, intervalMinutes) {
   const lastChecked = state.lastCheckedAt
-    ? new Date(state.lastCheckedAt).toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })
+    ? new Date(state.lastCheckedAt).toLocaleString('es-ES', { timeZone: 'Atlantic/Canary' })
     : 'Nunca';
   const seen = (state.seenUrls || []).length;
 
@@ -116,6 +117,28 @@ function buildNewsCaption(detail, summaryLen = 700) {
 }
 
 /**
+ * Mensaje para la última publicación.
+ */
+function buildPublicationText(pub) {
+  const lines = ['📄 <b>Última Publicación</b>\n'];
+  lines.push(`<b>${escapeHtml(pub.title)}</b>`);
+
+  if (pub.date) {
+    lines.push(`📅 <i>${escapeHtml(pub.date)}</i>`);
+  }
+
+  if (pub.summary) {
+    lines.push('');
+    lines.push(escapeHtml(pub.summary));
+  }
+
+  lines.push('');
+  lines.push(`🔗 <a href="${escapeHtml(pub.url)}">Abrir publicación</a>`);
+
+  return lines.join('\n').trim();
+}
+
+/**
  * Digest de múltiples noticias en un único mensaje.
  */
 function buildDigestText(items) {
@@ -144,5 +167,6 @@ module.exports = {
   buildContactoText,
   buildNewsCaption,
   buildDigestText,
+  buildPublicationText,
   truncate,
 };

@@ -14,8 +14,9 @@ const {
   buildCategoriasText,
   buildContactoText,
   buildNewsCaption,
+  buildPublicationText,
 } = require('./messages');
-const { fetchDetail } = require('./scraper');
+const { fetchDetail, fetchLatestPublication } = require('./scraper');
 const logger = require('./logger');
 const config = require('./config');
 
@@ -146,6 +147,21 @@ async function handleCommand(command, ctx) {
 
     const detail = await fetchDetail(httpClient, currentNews[0]);
     await sendNewsDetail(detail);
+    return;
+  }
+
+  // ── /ultima_publicacion ───────────────────────────────────────────────────
+  if (command === '/ultima_publicacion') {
+    await tg.sendMessage(token, chatId, '🔍 Obteniendo la última publicación...', { disablePreview: true }, timeout);
+
+    const pub = await fetchLatestPublication(httpClient);
+    if (!pub) {
+      await tg.sendMessage(token, chatId, '⚠️ No se pudo obtener la última publicación en este momento.', {}, timeout);
+      return;
+    }
+
+    const text = buildPublicationText(pub);
+    await tg.sendMessage(token, chatId, text, { disablePreview: false }, timeout);
     return;
   }
 

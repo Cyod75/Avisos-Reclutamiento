@@ -92,13 +92,28 @@ function extractImageUrl($ , baseUrl) {
   }
 
   const imgSelectors = [
-    'article img[src]', 'main img[src]',
-    '.article img[src]', '.news img[src]', 'img[src]',
+    '.journal-content-article img[src]', 'article img[src]', 'main img[src]',
+    '.article img[src]', '.news img[src]', '.image-container img[src]'
   ];
   for (const sel of imgSelectors) {
     const src = $(sel).first().attr('src') || '';
-    if (src.trim()) return normalizeUrl(src.trim(), baseUrl);
+    if (src.trim() && !src.toLowerCase().includes('logo')) {
+      return normalizeUrl(src.trim(), baseUrl);
+    }
   }
+
+  // Fallback a cualquier imagen que no sea un logo o icono
+  let fallbackSrc = null;
+  $('img[src]').each((_, el) => {
+    if (fallbackSrc) return;
+    const src = $(el).attr('src') || '';
+    const srcLower = src.toLowerCase();
+    if (src.trim() && !srcLower.includes('logo') && !srcLower.includes('icon')) {
+      fallbackSrc = src.trim();
+    }
+  });
+
+  if (fallbackSrc) return normalizeUrl(fallbackSrc, baseUrl);
 
   return null;
 }
@@ -219,4 +234,43 @@ async function fetchDetail(httpClient, item) {
   return { title, url: item.url, date, summary, imageUrl };
 }
 
-module.exports = { fetchAllNews, fetchDetail };
+/**
+ * Obtiene la última publicación de la página de publicaciones.
+ * @param {object} httpClient 
+ * @returns {Promise<{title,url,date,summary}|null>}
+ */
+async function fetchLatestPublication(httpClient) {
+  const url = 'https://reclutamiento.defensa.gob.es/publicaciones';
+  let html;
+  try {
+    const resp = await httpClient.get(url);
+    html = resp.data;
+  } catch (err) {
+    logger.warn(`Error al obtener publicaciones: ${err.message}`);
+    return null;
+  }
+
+  const $ = cheerio.load(html);
+  const firstItem = $('ul.row.justify-content-center li').first();
+  if (!firstItem.length) return null;
+
+  const aTag = firstItem.find('a');
+  const href = aTag.attr('href') || '';
+  const pubUrl = normalizeUrl(href, url);
+
+  const title = firstItem.find('.secction-card-title').text().replace(/\s+/g, ' ').trim();
+  const desc = firstItem.find('.section-card-body span').text().replace(/\s+/g, ' ').trim();
+  const dia = firstItem.find('.dia').text().replace(/\s+/g, ' ').trim();
+  const mes = firstItem.find('.mes').text().replace(/\s+/g, ' ').trim();
+  const year = firstItem.find('.year').text().replace(/\s+/g, ' ').trim();
+
+  let dateStr = '';
+  if (dia && mes && year) {
+    dateStr = `${dia} ${mes} ${year}`;
+  }
+
+  return { title, url: pubUrl, date: dateStr, summary: desc };
+}
+
+module.exports = { fetchAllNews, fetchDetail, fetchLatestPublication };
+
