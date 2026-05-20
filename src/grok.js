@@ -1,14 +1,15 @@
 'use strict';
 
 /**
- * grok.js — Cliente HTTP para interactuar con la API de Grok
+ * grok.js — Cliente HTTP para interactuar con la API de Groq
+ * Groq es compatible con la API de OpenAI.
  */
 
 const axios = require('axios');
 const config = require('./config');
 const logger = require('./logger');
 
-const GROK_API_URL = 'https://api.x.ai/v1/chat/completions';
+const GROK_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 /**
  * Llama a la API de Grok con los prompts proporcionados.

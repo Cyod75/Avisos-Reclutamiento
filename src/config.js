@@ -24,7 +24,7 @@ const config = {
 
   // Grok API
   grokApiKey: envStr('GROK_API_KEY'),
-  grokModel: envStr('GROK_MODEL', 'grok-3-mini'),
+  grokModel: envStr('GROK_MODEL', 'llama-3.3-70b-versatile'),
   grokTimeoutMs: envInt('GROK_TIMEOUT_MS', 60000),
 
   // Web scraping
