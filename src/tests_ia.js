@@ -11,7 +11,13 @@ const config = require('./config');
 const logger = require('./logger');
 
 // ─────────────────────────────────────────
-// PROMPTS DE GROK
+// CONSTANTES VISUALES
+// ─────────────────────────────────────────
+
+const LABELS = ['A', 'B', 'C'];
+
+// ─────────────────────────────────────────
+// PROMPTS DE GROQ
 // ─────────────────────────────────────────
 
 const PSICOTECNICO_SYSTEM_PROMPT = `Eres un experto en psicología militar y en el diseño de pruebas psicotécnicas de las Fuerzas Armadas Españolas, específicamente para el acceso a las escalas de Tropa y Marinería. Tu función es generar tests psicotécnicos variados, rigurosos y distintos en cada ejecución.
@@ -165,10 +171,17 @@ ATENCIÓN: Usa ÚNICAMENTE etiquetas HTML válidas de Telegram (<b>, <i>, <u>, <
 // UTILIDADES DE MENSAJES Y BOTONES
 // ─────────────────────────────────────────
 
-function construirBotonesOpciones(opciones, preguntaId) {
+function buildProgressBar(current, total) {
+  const porcentaje = Math.round((current / total) * 100);
+  const filled = Math.floor(porcentaje / 10);
+  const barra = '▓'.repeat(filled) + '░'.repeat(10 - filled);
+  return `<code>${barra}</code>  ${porcentaje}%`;
+}
+
+function construirBotonesOpciones(opciones) {
   const btnOptions = opciones.map((opcion, idx) => ([{
-    text: `${['🅰️','🅱️','🅲️'][idx]} ${opcion}`,
-    callback_data: `tia_r_${idx}` // 'r' de respuesta
+    text: `${LABELS[idx]}·  ${opcion}`,
+    callback_data: `tia_r_${idx}`
   }]));
   
   btnOptions.push([{ text: '❌ Cancelar test', callback_data: 'tia_cancel' }]);
@@ -206,7 +219,7 @@ async function iniciarPsicotecnico(chatId, userId) {
     const test = parsearJSON(rawJson);
 
     if (!test.preguntas || test.preguntas.length === 0) {
-      throw new Error('Test vacío recibido de Grok');
+      throw new Error('Test vacío recibido de Groq');
     }
 
     createSession(userId, {
@@ -233,12 +246,23 @@ async function procesarRespuestaPsicotecnico(chatId, userId, messageId, opcionId
   const nuevasRespuestas = [...respuestas, opcionIdx];
   const esCorrecta = opcionIdx === pregunta.correct;
   
-  // Editar mensaje actual para quitar botones y mostrar qué respondió
+  // Editar mensaje actual: mostrar resultado + botón explicación
   const progreso = `${preguntaActual + 1}/${totalPreguntas}`;
-  const answerText = `📊 <b>Pregunta ${progreso}</b> — <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n\n${tg.escapeHtml(pregunta.enunciado)}\n\nTu respuesta: <b>${['🅰️','🅱️','🅲️'][opcionIdx]} ${tg.escapeHtml(pregunta.opciones[opcionIdx])}</b> ${esCorrecta ? '✅' : '❌'}`;
-  
+  const indicador = esCorrecta ? '✅' : '❌';
+
+  let answerText = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n${buildProgressBar(preguntaActual + 1, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${indicador}  <b>${LABELS[opcionIdx]}·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
+
+  if (!esCorrecta) {
+    answerText += `\n✅  <b>${LABELS[pregunta.correct]}·</b> ${tg.escapeHtml(pregunta.opciones[pregunta.correct])}`;
+  }
+
+  // Botón de explicación (guarda índice de la pregunta respondida)
+  const explBtn = { text: '💡 Ver explicación', callback_data: `tia_e_${preguntaActual}` };
+
   try {
-    await tg.editMessageText(config.botToken, chatId, messageId, answerText, {}, config.timeoutMs);
+    await tg.editMessageText(config.botToken, chatId, messageId, answerText, {
+      replyMarkup: { inline_keyboard: [[explBtn]] }
+    }, config.timeoutMs);
   } catch (err) {
     logger.warn(`No se pudo editar el mensaje del test: ${err.message}`);
   }
@@ -250,9 +274,11 @@ async function procesarRespuestaPsicotecnico(chatId, userId, messageId, opcionId
   });
 
   if (nuevaPreguntaActual >= totalPreguntas) {
-    await tg.sendMessage(config.botToken, chatId, '✅ <b>¡Test completado!</b> Analizando tus resultados...', {}, config.timeoutMs);
+    await tg.sleep(600);
+    await tg.sendMessage(config.botToken, chatId, '✅ <b>¡Test completado!</b>\nAnalizando tus resultados...', {}, config.timeoutMs);
     await mostrarResultadosPsicotecnico(chatId, userId, preguntas, nuevasRespuestas);
   } else {
+    await tg.sleep(400);
     await enviarPregunta(chatId, userId, null);
   }
 }
@@ -260,7 +286,10 @@ async function procesarRespuestaPsicotecnico(chatId, userId, messageId, opcionId
 async function mostrarResultadosPsicotecnico(chatId, userId, preguntas, respuestasUsuario) {
   try {
     const aciertos = preguntas.filter((p, i) => respuestasUsuario[i] === p.correct).length;
-    await tg.sendMessage(config.botToken, chatId, `🎯 <b>Resultado: ${aciertos}/${preguntas.length} aciertos</b>\n\nGenerando informe detallado...`, {}, config.timeoutMs);
+    const nota = Math.round((aciertos / preguntas.length) * 10);
+    const emoji = nota >= 7 ? '🏆' : nota >= 5 ? '📈' : '📉';
+
+    await tg.sendMessage(config.botToken, chatId, `${emoji} <b>Resultado: ${aciertos}/${preguntas.length}</b>  ·  Nota: <b>${nota}/10</b>\n\nGenerando informe detallado...`, {}, config.timeoutMs);
 
     const informeRaw = await llamarGrok(
       'Eres un experto en psicología militar. Genera informes claros, motivadores y útiles para opositores al Ejército Español.',
@@ -275,10 +304,12 @@ async function mostrarResultadosPsicotecnico(chatId, userId, preguntas, respuest
 
     await tg.sendMessage(config.botToken, chatId, '¿Quieres hacer otro test?', {
       replyMarkup: {
-        inline_keyboard: [[
-          { text: '🔁 Nuevo psicotécnico', callback_data: 'tia_again_psi' },
-          { text: '🧬 Test personalidad', callback_data: 'tia_again_per' }
-        ]]
+        inline_keyboard: [
+          [
+            { text: '🧠 Nuevo psicotécnico', callback_data: 'tia_again_psi' },
+            { text: '🧬 Test personalidad', callback_data: 'tia_again_per' }
+          ]
+        ]
       }
     }, config.timeoutMs);
 
@@ -324,7 +355,7 @@ async function procesarRespuestaPersonalidad(chatId, userId, messageId, opcionId
   const nuevasRespuestas = [...respuestas, opcionIdx];
   const progreso = `${preguntaActual + 1}/${totalPreguntas}`;
   
-  const answerText = `🧬 <b>Pregunta ${progreso}</b>\n\n${tg.escapeHtml(pregunta.enunciado)}\n\nTu respuesta: <b>${['🅰️','🅱️','🅲️'][opcionIdx]} ${tg.escapeHtml(pregunta.opciones[opcionIdx])}</b> ✅`;
+  const answerText = `<b>Pregunta ${progreso}</b>\n${buildProgressBar(preguntaActual + 1, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n▸ <b>${LABELS[opcionIdx]}·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
   
   try {
     await tg.editMessageText(config.botToken, chatId, messageId, answerText, {}, config.timeoutMs);
@@ -339,9 +370,11 @@ async function procesarRespuestaPersonalidad(chatId, userId, messageId, opcionId
   });
 
   if (nuevaPreguntaActual >= totalPreguntas) {
-    await tg.sendMessage(config.botToken, chatId, '✅ <b>¡Has completado el test!</b> Analizando tu perfil de personalidad...', {}, config.timeoutMs);
+    await tg.sleep(600);
+    await tg.sendMessage(config.botToken, chatId, '✅ <b>¡Has completado el test!</b>\nAnalizando tu perfil de personalidad...', {}, config.timeoutMs);
     await mostrarResultadosPersonalidad(chatId, userId, preguntas, nuevasRespuestas);
   } else {
+    await tg.sleep(400);
     await enviarPregunta(chatId, userId, null);
   }
 }
@@ -361,10 +394,12 @@ async function mostrarResultadosPersonalidad(chatId, userId, preguntas, respuest
 
     await tg.sendMessage(config.botToken, chatId, '¿Quieres continuar practicando?', {
       replyMarkup: {
-        inline_keyboard: [[
-          { text: '🧠 Test psicotécnico', callback_data: 'tia_again_psi' },
-          { text: '🔁 Otro test personalidad', callback_data: 'tia_again_per' }
-        ]]
+        inline_keyboard: [
+          [
+            { text: '🧠 Test psicotécnico', callback_data: 'tia_again_psi' },
+            { text: '🧬 Otro personalidad', callback_data: 'tia_again_per' }
+          ]
+        ]
       }
     }, config.timeoutMs);
 
@@ -393,17 +428,14 @@ async function enviarPregunta(chatId, userId, messageIdParaEditar) {
 
   let texto = '';
   if (tipo === 'psicotecnico') {
-    texto = `📊 <b>Pregunta ${progreso}</b> — <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n\n${tg.escapeHtml(pregunta.enunciado)}`;
+    texto = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n${buildProgressBar(preguntaActual, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}`;
   } else {
-    const porcentaje = Math.round((preguntaActual / totalPreguntas) * 100);
-    const completado = Math.floor(porcentaje / 10);
-    const barra = '▓'.repeat(completado) + '░'.repeat(10 - completado);
-    texto = `🧬 <b>Pregunta ${progreso}</b>\n<code>${barra} ${porcentaje}%</code>\n\n${tg.escapeHtml(pregunta.enunciado)}`;
+    texto = `<b>Pregunta ${progreso}</b>\n${buildProgressBar(preguntaActual, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}`;
   }
 
   const opts = {
     replyMarkup: {
-      inline_keyboard: construirBotonesOpciones(pregunta.opciones, pregunta.id)
+      inline_keyboard: construirBotonesOpciones(pregunta.opciones)
     }
   };
 
@@ -415,6 +447,41 @@ async function enviarPregunta(chatId, userId, messageIdParaEditar) {
     }
   } else {
     await tg.sendMessage(config.botToken, chatId, texto, opts, config.timeoutMs);
+  }
+}
+
+// ─────────────────────────────────────────
+// HANDLER: EXPLICACIÓN
+// ─────────────────────────────────────────
+
+async function mostrarExplicacion(chatId, userId, messageId, preguntaIdx) {
+  const session = getSession(userId);
+  if (!session || session.tipo !== 'psicotecnico') return;
+
+  const pregunta = session.preguntas[preguntaIdx];
+  if (!pregunta || !pregunta.explanation) return;
+
+  const progreso = `${preguntaIdx + 1}/${session.totalPreguntas}`;
+  const opcionIdx = session.respuestas[preguntaIdx];
+
+  // Si por algún motivo no hay respuesta registrada para esta pregunta, ignorar
+  if (opcionIdx === undefined) return;
+
+  const esCorrecta = opcionIdx === pregunta.correct;
+  const indicador = esCorrecta ? '✅' : '❌';
+
+  let answerText = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n${buildProgressBar(preguntaIdx + 1, session.totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${indicador}  <b>${LABELS[opcionIdx]}·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
+
+  if (!esCorrecta) {
+    answerText += `\n✅  <b>${LABELS[pregunta.correct]}·</b> ${tg.escapeHtml(pregunta.opciones[pregunta.correct])}`;
+  }
+
+  answerText += `\n\n💡 <i>${tg.escapeHtml(pregunta.explanation)}</i>`;
+
+  try {
+    await tg.editMessageText(config.botToken, chatId, messageId, answerText, {}, config.timeoutMs);
+  } catch (err) {
+    logger.warn(`No se pudo editar explicación: ${err.message}`);
   }
 }
 
@@ -431,10 +498,10 @@ async function handleTestsIACommand(chatId, userId) {
     '🪖 <b>Tests IA — Preparación Ejército</b>\n\nSelecciona el tipo de test que quieres realizar:', 
     {
       replyMarkup: {
-        inline_keyboard: [[
-          { text: '🧠 Test Psicotécnico', callback_data: 'tia_menu_psi' },
-          { text: '🧬 Test Personalidad', callback_data: 'tia_menu_per' }
-        ]]
+        inline_keyboard: [
+          [{ text: '🧠  Test Psicotécnico', callback_data: 'tia_menu_psi' }],
+          [{ text: '🧬  Test Personalidad', callback_data: 'tia_menu_per' }]
+        ]
       }
     }, 
     config.timeoutMs
@@ -460,13 +527,21 @@ async function handleTestCallback(chatId, userId, callbackData, callbackQueryId,
   if (callbackData === 'tia_cancel') {
     deleteSession(userId);
     try {
-      await tg.editMessageText(config.botToken, chatId, messageId, '❌ Test cancelado. Usa /tests_ia para empezar de nuevo.', {}, config.timeoutMs);
+      await tg.editMessageText(config.botToken, chatId, messageId, '❌ Test cancelado.\nUsa /tests_ia para empezar de nuevo.', {}, config.timeoutMs);
     } catch(e) {
-      await tg.sendMessage(config.botToken, chatId, '❌ Test cancelado. Usa /tests_ia para empezar de nuevo.', {}, config.timeoutMs);
+      await tg.sendMessage(config.botToken, chatId, '❌ Test cancelado.\nUsa /tests_ia para empezar de nuevo.', {}, config.timeoutMs);
     }
     return;
   }
 
+  // Botón explicación: tia_e_{preguntaIdx}
+  if (callbackData.startsWith('tia_e_')) {
+    const preguntaIdx = parseInt(callbackData.split('_')[2], 10);
+    await mostrarExplicacion(chatId, userId, messageId, preguntaIdx);
+    return;
+  }
+
+  // Respuesta: tia_r_{opcionIdx}
   if (callbackData.startsWith('tia_r_')) {
     const session = getSession(userId);
     if (!session) {
