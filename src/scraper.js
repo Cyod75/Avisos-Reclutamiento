@@ -67,8 +67,15 @@ function extractNewsFromPage(html, baseUrl) {
     title = title.trim();
     if (!title) return;
 
+    let imageUrl = null;
+    const container = $(el).closest('li, .noticia, .journal-content-article');
+    const imgNode = (container.length ? container : $(el)).find('img[src]').first();
+    if (imgNode.length) {
+      imageUrl = cleanLiferayImageUrl(normalizeUrl(imgNode.attr('src') || '', baseUrl));
+    }
+
     seen.add(url);
-    items.push({ title, url });
+    items.push({ title, url, listImageUrl: imageUrl });
   });
 
   return items;
@@ -259,7 +266,7 @@ async function fetchDetail(httpClient, item) {
   const pageText = $.text ? $.text() : $('body').text();
   const date     = extractDateFromText(pageText);
   const summary  = extractSummary($);
-  const imageUrl = extractImageUrl($, item.url);
+  const imageUrl = item.listImageUrl || extractImageUrl($, item.url);
 
   return { title, url: item.url, date, summary, imageUrl };
 }

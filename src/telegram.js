@@ -129,4 +129,20 @@ async function answerCallbackQuery(token, callbackQueryId, text = '', timeoutMs 
   return callApi(token, 'answerCallbackQuery', { callback_query_id: callbackQueryId, text }, timeoutMs);
 }
 
-module.exports = { sendMessage, sendPhoto, getUpdates, confirmUpdates, answerCallbackQuery, escapeHtml, sleep };
+/**
+ * Edita el texto de un mensaje existente.
+ */
+async function editMessageText(token, chatId, messageId, text, { disablePreview = false, replyMarkup = null } = {}, timeoutMs = 30000) {
+  const params = {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: 'HTML',
+    disable_web_page_preview: disablePreview,
+  };
+  if (replyMarkup) params.reply_markup = replyMarkup;
+
+  return callApi(token, 'editMessageText', params, timeoutMs);
+}
+
+module.exports = { sendMessage, sendPhoto, getUpdates, confirmUpdates, answerCallbackQuery, editMessageText, escapeHtml, sleep };

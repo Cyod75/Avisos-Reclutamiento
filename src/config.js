@@ -22,6 +22,11 @@ const config = {
   botToken: envStr('TELEGRAM_BOT_TOKEN'),
   chatId: envStr('TELEGRAM_CHAT_ID'),
 
+  // Grok API
+  grokApiKey: envStr('GROK_API_KEY'),
+  grokModel: envStr('GROK_MODEL', 'grok-3-mini'),
+  grokTimeoutMs: envInt('GROK_TIMEOUT_MS', 60000),
+
   // Web scraping
   baseUrl: envStr('BASE_URL', 'https://reclutamiento.defensa.gob.es/noticias'),
   portalUrl: 'https://reclutamiento.defensa.gob.es/inicio',

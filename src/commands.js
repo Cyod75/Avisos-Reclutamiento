@@ -13,10 +13,12 @@ const {
   buildAccessText,
   buildCategoriasText,
   buildContactoText,
+  buildPsicotecnicoText,
   buildNewsCaption,
   buildPublicationText,
 } = require('./messages');
 const { fetchDetail, fetchLatestPublication } = require('./scraper');
+const { handleTestsIACommand, deleteSession } = require('./tests_ia');
 const logger = require('./logger');
 const config = require('./config');
 
@@ -82,7 +84,7 @@ function isStaleMessage(message, maxAgeSeconds) {
  * @param {Array}    ctx.currentNews  — lista actual de noticias
  */
 async function handleCommand(command, ctx) {
-  const { state, httpClient, currentNews } = ctx;
+  const { state, httpClient, currentNews, userId } = ctx;
   const token    = config.botToken;
   const chatId   = config.chatId;
   const timeout  = config.timeoutMs;
@@ -162,6 +164,25 @@ async function handleCommand(command, ctx) {
 
     const text = buildPublicationText(pub);
     await tg.sendMessage(token, chatId, text, { disablePreview: false }, timeout);
+    return;
+  }
+
+  // ── /psicotecnico_web ─────────────────────────────────────────────────────
+  if (command === '/psicotecnico_web') {
+    await tg.sendMessage(token, chatId, buildPsicotecnicoText(), { disablePreview: true }, timeout);
+    return;
+  }
+
+  // ── /tests_ia ─────────────────────────────────────────────────────────────
+  if (command === '/tests_ia') {
+    await handleTestsIACommand(chatId, userId);
+    return;
+  }
+
+  // ── /cancelar_test ────────────────────────────────────────────────────────
+  if (command === '/cancelar_test') {
+    if (userId) deleteSession(userId);
+    await tg.sendMessage(token, chatId, '❌ Test cancelado. Usa /tests_ia para empezar de nuevo.', {}, timeout);
     return;
   }
 

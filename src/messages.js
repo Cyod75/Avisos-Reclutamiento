@@ -31,6 +31,9 @@ function buildHelpText() {
     '/acceder — Enlace directo al portal de reclutamiento\n' +
     '/categorias — Categorías y áreas de reclutamiento\n' +
     '/contacto — Teléfonos y correos de interés\n' +
+    '/psicotecnico_web — Enlaces y accesos a tests psicotécnicos\n' +
+    '/tests_ia — Practicar tests psicotécnicos y de personalidad con IA\n' +
+    '/cancelar_test — Cancela el test activo en ese momento\n' +
     '/estado — Estado interno del bot\n\n' +
     '⏰ El bot comprueba noticias automáticamente cada 3 horas.'
   );
@@ -92,6 +95,19 @@ function buildContactoText() {
     '✉️ <b>Correo:</b> reclutamientolaspalmas@oc.mde.es\n' +
     '☎️ <b>Teléfono:</b> 91 308 97 98 <i>(Reclutamiento)</i>\n' +
     '☎️ <b>Teléfono:</b> 902 432 100 <i>(Otro)</i>'
+  );
+}
+
+function buildPsicotecnicoText() {
+  return (
+    '🧠 <b>Tests Psicotécnicos — Tropa y Marinería</b>\n\n' +
+    '🔹 <b>OpositaTest:</b>\n' +
+    '🔗 <a href="https://www.opositatest.com/oposiciones/tropa-marineria/test">https://www.opositatest.com/oposiciones/tropa-marineria/test</a>\n' +
+    '🔗 <a href="https://www.opositatest.com/oposiciones/psicotecnicos-generales/test">https://www.opositatest.com/oposiciones/psicotecnicos-generales/test</a>\n' +
+    '✉️ Correo: <code>mepowos950@marineso.com</code>\n' +
+    '🔑 Contraseña: <code>perrosanchez123</code>\n\n' +
+    '🔹 <b>Opositor:</b>\n' +
+    '🔗 <a href="https://www.opositor.com/hacer-test?oposicion=tropa-y-marineria&modulos%5B%5D=4">https://www.opositor.com/hacer-test?oposicion=tropa-y-marineria&modulos%5B%5D=4</a>'
   );
 }
 
@@ -165,6 +181,7 @@ module.exports = {
   buildAccessText,
   buildCategoriasText,
   buildContactoText,
+  buildPsicotecnicoText,
   buildNewsCaption,
   buildDigestText,
   buildPublicationText,

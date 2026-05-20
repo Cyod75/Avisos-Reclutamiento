@@ -24,6 +24,7 @@ const { fetchAllNews }         = require('./scraper');
 const tg = require('./telegram');
 const { handleCommand, sendNewsDetail, isStaleMessage } = require('./commands');
 const { buildDigestText } = require('./messages');
+const { handleTestCallback } = require('./tests_ia');
 
 // ---------------------------------------------------------------------------
 // Validación de configuración obligatoria
@@ -159,10 +160,26 @@ async function processUpdates(state) {
 
   // Recopilar el último comando válido del chat configurado
   let latestCommand = null;
+  let latestCommandUserId = null;
 
   for (const update of updates) {
     const updateId = Number(update.update_id);
     newOffset = Math.max(newOffset, updateId + 1);
+
+    if (update.callback_query) {
+      const cb = update.callback_query;
+      const cbChatId = String(cb.message?.chat?.id || '');
+      const cbUserId = cb.from?.id;
+      
+      if (cbChatId === String(config.chatId) && cb.data && cb.data.startsWith('tia_')) {
+        try {
+          await handleTestCallback(cbChatId, cbUserId, cb.data, cb.id, cb.message?.message_id);
+        } catch (err) {
+          logger.error(`Error en callback ${cb.data}: ${err.message}`);
+        }
+      }
+      continue;
+    }
 
     const message = update.message || update.edited_message;
     if (!message) continue;
@@ -182,6 +199,7 @@ async function processUpdates(state) {
     }
 
     latestCommand = rawCmd;
+    latestCommandUserId = message.from?.id;
   }
 
   // Confirmar updates para no recibirlos de nuevo
@@ -208,7 +226,7 @@ async function processUpdates(state) {
     }
 
     try {
-      await handleCommand(latestCommand, { state, httpClient, currentNews });
+      await handleCommand(latestCommand, { state, httpClient, currentNews, userId: latestCommandUserId });
     } catch (err) {
       logger.error(`Error procesando comando "${latestCommand}": ${err.message}`);
       try {
