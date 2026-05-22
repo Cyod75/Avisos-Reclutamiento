@@ -16,6 +16,28 @@ const logger = require('./logger');
 
 const LABELS = ['A', 'B', 'C'];
 
+const DIFICULTADES_PSICOTECNICO = {
+  facil: {
+    label: 'Fácil',
+    descripcion: 'nivel básico, enunciados directos, operaciones sencillas y poco cálculo mental',
+    temperatura: 0.75
+  },
+  medio: {
+    label: 'Medio',
+    descripcion: 'nivel similar al habitual de práctica para Tropa y Marinería, con razonamiento moderado',
+    temperatura: 0.9
+  },
+  dificil: {
+    label: 'Difícil',
+    descripcion: 'nivel exigente, más pasos de razonamiento, distractores plausibles y mayor presión de tiempo',
+    temperatura: 0.95
+  }
+};
+
+function normalizarDificultadPsicotecnico(dificultad) {
+  return DIFICULTADES_PSICOTECNICO[dificultad] ? dificultad : 'medio';
+}
+
 // ─────────────────────────────────────────
 // PROMPTS DE GROQ
 // ─────────────────────────────────────────
@@ -32,12 +54,17 @@ REGLAS ABSOLUTAS:
 - El campo "correct" contiene el índice (0, 1 o 2) de la opción correcta.
 - El campo "explanation" contiene una explicación breve de por qué esa es la respuesta correcta (máximo 2 frases).`;
 
-function buildPsicotecnicoUserPrompt(tiposYa = []) {
+function buildPsicotecnicoUserPrompt(tiposYa = [], dificultad = 'medio') {
+  const dificultadKey = normalizarDificultadPsicotecnico(dificultad);
+  const dificultadConfig = DIFICULTADES_PSICOTECNICO[dificultadKey];
   const evitar = tiposYa.length > 0 
     ? `Evita estos tipos de aptitud que ya se han usado recientemente: ${tiposYa.join(', ')}.` 
     : '';
 
   return `Genera un test psicotécnico de exactamente 10 preguntas para oposiciones de Tropa y Marinería del Ejército Español.
+
+Dificultad solicitada: ${dificultadConfig.label}.
+Adapta todas las preguntas a esta dificultad: ${dificultadConfig.descripcion}.
 
 ${evitar}
 
@@ -67,7 +94,8 @@ Devuelve este JSON exacto:
 }`;
 }
 
-function buildResultadosPsicotecnicoPrompt(preguntas, respuestasUsuario) {
+function buildResultadosPsicotecnicoPrompt(preguntas, respuestasUsuario, dificultad = 'medio') {
+  const dificultadConfig = DIFICULTADES_PSICOTECNICO[normalizarDificultadPsicotecnico(dificultad)];
   const detalles = preguntas.map((p, i) => {
     const respuestaIdx = respuestasUsuario[i];
     const esCorrecta = respuestaIdx === p.correct;
@@ -83,7 +111,7 @@ function buildResultadosPsicotecnicoPrompt(preguntas, respuestasUsuario) {
 
   const aciertos = detalles.filter(d => d.correcta).length;
 
-  return `El usuario ha completado un test psicotécnico de ${preguntas.length} preguntas para las oposiciones de Tropa y Marinería. Ha obtenido ${aciertos}/${preguntas.length} aciertos.
+  return `El usuario ha completado un test psicotécnico de dificultad ${dificultadConfig.label} y ${preguntas.length} preguntas para las oposiciones de Tropa y Marinería. Ha obtenido ${aciertos}/${preguntas.length} aciertos.
 
 Detalle de respuestas:
 ${JSON.stringify(detalles, null, 2)}
@@ -178,11 +206,17 @@ function buildProgressBar(current, total) {
   return `<code>${barra}</code>  ${porcentaje}%`;
 }
 
+function formatearOpciones(opciones) {
+  return opciones
+    .map((opcion, idx) => `<b>${LABELS[idx]}.</b> ${tg.escapeHtml(opcion)}`)
+    .join('\n');
+}
+
 function construirBotonesOpciones(opciones) {
-  const btnOptions = opciones.map((opcion, idx) => ([{
-    text: `${LABELS[idx]} ·  ${opcion}`,
+  const btnOptions = [opciones.map((_, idx) => ({
+    text: LABELS[idx],
     callback_data: `tia_r_${idx}`
-  }]));
+  }))];
   
   btnOptions.push([{ text: '❌ Cancelar test', callback_data: 'tia_cancel' }]);
   return btnOptions;
@@ -207,15 +241,46 @@ function dividirEnChunks(texto, maxLen) {
   return chunks;
 }
 
+async function limpiarBotonExplicacionAnterior(chatId, session, messageIdActual) {
+  const anterior = session.lastExplanationMessageId;
+  if (!anterior || anterior === messageIdActual) return;
+
+  try {
+    await tg.editMessageReplyMarkup(config.botToken, chatId, anterior, null, config.timeoutMs);
+  } catch (err) {
+    logger.warn(`No se pudo quitar el botón de explicación anterior: ${err.message}`);
+  }
+}
+
+async function mostrarMenuDificultadPsicotecnico(chatId) {
+  await tg.sendMessage(config.botToken, chatId, '🧠 <b>Test psicotécnico</b>\n\nElige la dificultad:', {
+    replyMarkup: {
+      inline_keyboard: [
+        [{ text: '🟢 Fácil', callback_data: 'tia_psi_facil' }],
+        [{ text: '🟡 Medio', callback_data: 'tia_psi_medio' }],
+        [{ text: '🔴 Difícil', callback_data: 'tia_psi_dificil' }],
+        [{ text: '❌ Cancelar', callback_data: 'tia_cancel' }]
+      ]
+    }
+  }, config.timeoutMs);
+}
+
 // ─────────────────────────────────────────
 // FLUJO PSICOTÉCNICO
 // ─────────────────────────────────────────
 
-async function iniciarPsicotecnico(chatId, userId) {
-  await tg.sendMessage(config.botToken, chatId, '🧠 <b>Generando tu test psicotécnico personalizado...</b>\n\nEsto puede tardar unos segundos.', {}, config.timeoutMs);
+async function iniciarPsicotecnico(chatId, userId, dificultad = 'medio') {
+  const dificultadKey = normalizarDificultadPsicotecnico(dificultad);
+  const dificultadConfig = DIFICULTADES_PSICOTECNICO[dificultadKey];
+
+  await tg.sendMessage(config.botToken, chatId, `🧠 <b>Generando tu test psicotécnico ${tg.escapeHtml(dificultadConfig.label.toLowerCase())}...</b>\n\nEsto puede tardar unos segundos.`, {}, config.timeoutMs);
 
   try {
-    const rawJson = await llamarGrok(PSICOTECNICO_SYSTEM_PROMPT, buildPsicotecnicoUserPrompt());
+    const rawJson = await llamarGrok(
+      PSICOTECNICO_SYSTEM_PROMPT,
+      buildPsicotecnicoUserPrompt([], dificultadKey),
+      dificultadConfig.temperatura
+    );
     const test = parsearJSON(rawJson);
 
     if (!test.preguntas || test.preguntas.length === 0) {
@@ -224,10 +289,13 @@ async function iniciarPsicotecnico(chatId, userId) {
 
     createSession(userId, {
       tipo: 'psicotecnico',
+      dificultad: dificultadKey,
       preguntas: test.preguntas,
       respuestas: [],
       preguntaActual: 0,
-      totalPreguntas: test.preguntas.length
+      totalPreguntas: test.preguntas.length,
+      lastExplanationMessageId: null,
+      lastExplanationQuestionIdx: null
     });
 
     await enviarPregunta(chatId, userId, null);
@@ -245,12 +313,14 @@ async function procesarRespuestaPsicotecnico(chatId, userId, messageId, opcionId
 
   const nuevasRespuestas = [...respuestas, opcionIdx];
   const esCorrecta = opcionIdx === pregunta.correct;
+  await limpiarBotonExplicacionAnterior(chatId, session, messageId);
   
   // Editar mensaje actual: mostrar resultado + botón explicación
   const progreso = `${preguntaActual + 1}/${totalPreguntas}`;
   const indicador = esCorrecta ? '✅' : '❌';
 
-  let answerText = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n${buildProgressBar(preguntaActual + 1, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${indicador}  <b>${LABELS[opcionIdx]} ·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
+  const dificultad = DIFICULTADES_PSICOTECNICO[normalizarDificultadPsicotecnico(session.dificultad)]?.label;
+  let answerText = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>  ·  ${tg.escapeHtml(dificultad)}\n${buildProgressBar(preguntaActual + 1, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${indicador}  <b>${LABELS[opcionIdx]} ·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
 
   if (!esCorrecta) {
     answerText += `\n✅  <b>${LABELS[pregunta.correct]} ·</b> ${tg.escapeHtml(pregunta.opciones[pregunta.correct])}`;
@@ -270,30 +340,33 @@ async function procesarRespuestaPsicotecnico(chatId, userId, messageId, opcionId
   const nuevaPreguntaActual = preguntaActual + 1;
   updateSession(userId, {
     respuestas: nuevasRespuestas,
-    preguntaActual: nuevaPreguntaActual
+    preguntaActual: nuevaPreguntaActual,
+    lastExplanationMessageId: messageId,
+    lastExplanationQuestionIdx: preguntaActual
   });
 
   if (nuevaPreguntaActual >= totalPreguntas) {
     await tg.sleep(600);
     await tg.sendMessage(config.botToken, chatId, '✅ <b>¡Test completado!</b>\nAnalizando tus resultados...', {}, config.timeoutMs);
-    await mostrarResultadosPsicotecnico(chatId, userId, preguntas, nuevasRespuestas);
+    await mostrarResultadosPsicotecnico(chatId, userId, preguntas, nuevasRespuestas, session.dificultad);
   } else {
     await tg.sleep(400);
     await enviarPregunta(chatId, userId, null);
   }
 }
 
-async function mostrarResultadosPsicotecnico(chatId, userId, preguntas, respuestasUsuario) {
+async function mostrarResultadosPsicotecnico(chatId, userId, preguntas, respuestasUsuario, dificultad = 'medio') {
   try {
     const aciertos = preguntas.filter((p, i) => respuestasUsuario[i] === p.correct).length;
     const nota = Math.round((aciertos / preguntas.length) * 10);
     const emoji = nota >= 7 ? '🏆' : nota >= 5 ? '📈' : '📉';
+    const dificultadConfig = DIFICULTADES_PSICOTECNICO[normalizarDificultadPsicotecnico(dificultad)];
 
-    await tg.sendMessage(config.botToken, chatId, `${emoji} <b>Resultado: ${aciertos}/${preguntas.length}</b>  ·  Nota: <b>${nota}/10</b>\n\nGenerando informe detallado...`, {}, config.timeoutMs);
+    await tg.sendMessage(config.botToken, chatId, `${emoji} <b>Resultado: ${aciertos}/${preguntas.length}</b>  ·  Nota: <b>${nota}/10</b>\nDificultad: <b>${tg.escapeHtml(dificultadConfig.label)}</b>\n\nGenerando informe detallado...`, {}, config.timeoutMs);
 
     const informeRaw = await llamarGrok(
       'Eres un experto en psicología militar. Genera informes claros, motivadores y útiles para opositores al Ejército Español.',
-      buildResultadosPsicotecnicoPrompt(preguntas, respuestasUsuario),
+      buildResultadosPsicotecnicoPrompt(preguntas, respuestasUsuario, dificultad),
       0.6
     );
 
@@ -313,11 +386,11 @@ async function mostrarResultadosPsicotecnico(chatId, userId, preguntas, respuest
       }
     }, config.timeoutMs);
 
-    deleteSession(userId);
+    updateSession(userId, { completado: true });
   } catch (error) {
     logger.error(`[tests_ia] Error generando informe: ${error.message}`);
     await tg.sendMessage(config.botToken, chatId, '⚠️ No se pudo generar el informe detallado, pero tu puntuación fue guardada.', {}, config.timeoutMs);
-    deleteSession(userId);
+    updateSession(userId, { completado: true });
   }
 }
 
@@ -428,9 +501,10 @@ async function enviarPregunta(chatId, userId, messageIdParaEditar) {
 
   let texto = '';
   if (tipo === 'psicotecnico') {
-    texto = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n${buildProgressBar(preguntaActual, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}`;
+    const dificultad = DIFICULTADES_PSICOTECNICO[normalizarDificultadPsicotecnico(session.dificultad)]?.label;
+    texto = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>  ·  ${tg.escapeHtml(dificultad)}\n${buildProgressBar(preguntaActual, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${formatearOpciones(pregunta.opciones)}`;
   } else {
-    texto = `<b>Pregunta ${progreso}</b>\n${buildProgressBar(preguntaActual, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}`;
+    texto = `<b>Pregunta ${progreso}</b>\n${buildProgressBar(preguntaActual, totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${formatearOpciones(pregunta.opciones)}`;
   }
 
   const opts = {
@@ -458,6 +532,18 @@ async function mostrarExplicacion(chatId, userId, messageId, preguntaIdx) {
   const session = getSession(userId);
   if (!session || session.tipo !== 'psicotecnico') return;
 
+  if (
+    preguntaIdx !== session.lastExplanationQuestionIdx ||
+    messageId !== session.lastExplanationMessageId
+  ) {
+    try {
+      await tg.editMessageReplyMarkup(config.botToken, chatId, messageId, null, config.timeoutMs);
+    } catch (err) {
+      logger.warn(`No se pudo quitar un botón de explicación obsoleto: ${err.message}`);
+    }
+    return;
+  }
+
   const pregunta = session.preguntas[preguntaIdx];
   if (!pregunta || !pregunta.explanation) return;
 
@@ -469,8 +555,9 @@ async function mostrarExplicacion(chatId, userId, messageId, preguntaIdx) {
 
   const esCorrecta = opcionIdx === pregunta.correct;
   const indicador = esCorrecta ? '✅' : '❌';
+  const dificultad = DIFICULTADES_PSICOTECNICO[normalizarDificultadPsicotecnico(session.dificultad)]?.label;
 
-  let answerText = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>\n${buildProgressBar(preguntaIdx + 1, session.totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${indicador}  <b>${LABELS[opcionIdx]} ·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
+  let answerText = `<b>Pregunta ${progreso}</b>  ·  <i>${tg.escapeHtml(pregunta.aptitud.toUpperCase())}</i>  ·  ${tg.escapeHtml(dificultad)}\n${buildProgressBar(preguntaIdx + 1, session.totalPreguntas)}\n\n${tg.escapeHtml(pregunta.enunciado)}\n\n${indicador}  <b>${LABELS[opcionIdx]} ·</b> ${tg.escapeHtml(pregunta.opciones[opcionIdx])}`;
 
   if (!esCorrecta) {
     answerText += `\n✅  <b>${LABELS[pregunta.correct]} ·</b> ${tg.escapeHtml(pregunta.opciones[pregunta.correct])}`;
@@ -515,11 +602,19 @@ async function handleTestCallback(chatId, userId, callbackData, callbackQueryId,
   } catch(e) {}
 
   if (callbackData === 'tia_menu_psi' || callbackData === 'tia_again_psi') {
-    await iniciarPsicotecnico(chatId, userId);
+    deleteSession(userId);
+    await mostrarMenuDificultadPsicotecnico(chatId);
+    return;
+  }
+
+  if (callbackData.startsWith('tia_psi_')) {
+    const dificultad = callbackData.replace('tia_psi_', '');
+    await iniciarPsicotecnico(chatId, userId, dificultad);
     return;
   }
 
   if (callbackData === 'tia_menu_per' || callbackData === 'tia_again_per') {
+    deleteSession(userId);
     await iniciarPersonalidad(chatId, userId);
     return;
   }
@@ -549,7 +644,17 @@ async function handleTestCallback(chatId, userId, callbackData, callbackQueryId,
       return;
     }
 
+    if (session.completado || session.preguntaActual >= session.totalPreguntas) {
+      try {
+        await tg.editMessageReplyMarkup(config.botToken, chatId, messageId, null, config.timeoutMs);
+      } catch (err) {
+        logger.warn(`No se pudo limpiar un botón de respuesta obsoleto: ${err.message}`);
+      }
+      return;
+    }
+
     const opcionIdx = parseInt(callbackData.split('_')[2], 10);
+    if (!Number.isInteger(opcionIdx) || opcionIdx < 0 || opcionIdx >= LABELS.length) return;
 
     if (session.tipo === 'psicotecnico') {
       await procesarRespuestaPsicotecnico(chatId, userId, messageId, opcionIdx, session);

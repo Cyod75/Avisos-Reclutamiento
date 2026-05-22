@@ -145,4 +145,17 @@ async function editMessageText(token, chatId, messageId, text, { disablePreview 
   return callApi(token, 'editMessageText', params, timeoutMs);
 }
 
-module.exports = { sendMessage, sendPhoto, getUpdates, confirmUpdates, answerCallbackQuery, editMessageText, escapeHtml, sleep };
+/**
+ * Edita o elimina los botones inline de un mensaje existente.
+ */
+async function editMessageReplyMarkup(token, chatId, messageId, replyMarkup = null, timeoutMs = 30000) {
+  const params = {
+    chat_id: chatId,
+    message_id: messageId,
+  };
+  if (replyMarkup) params.reply_markup = replyMarkup;
+
+  return callApi(token, 'editMessageReplyMarkup', params, timeoutMs);
+}
+
+module.exports = { sendMessage, sendPhoto, getUpdates, confirmUpdates, answerCallbackQuery, editMessageText, editMessageReplyMarkup, escapeHtml, sleep };
